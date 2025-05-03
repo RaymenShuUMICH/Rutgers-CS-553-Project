@@ -3,6 +3,12 @@ import socketserver
 import numpy as np
 import os
 import json
+import threading
+
+def background_processing():
+    while True:
+        # TODO process data from steam api and write to storage
+        return
 
 class SimpleHandler(BaseHTTPRequestHandler):
     def do_POST(self):
@@ -14,7 +20,7 @@ class SimpleHandler(BaseHTTPRequestHandler):
             message = data.get('message', '')
             print(f"Received message: {message}")
             
-            # TODO: process message request using steam api
+            # TODO: process message request
 
             # Send response
             self.send_response(200)
@@ -28,6 +34,10 @@ class SimpleHandler(BaseHTTPRequestHandler):
             self.wfile.write(b'Invalid JSON')
 
 if __name__ == '__main__':
+
+    bg_thread = threading.Thread(target=background_worker, daemon=True)
+    bg_thread.start()
+
     server_address = ('', 8000)
     httpd = HTTPServer(server_address, SimpleHandler)
     print("Server running, http://localhost:8000")
