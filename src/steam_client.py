@@ -20,6 +20,7 @@ class SteamAPIClient:
         self.last_request_time = 0
         self.user_data_dir = BASE_DIR / "data/raw/users"
         self.game_data_dir = BASE_DIR / "data/raw/games"
+        self.friends_data_dir = BASE_DIR / "data/raw/friends"
     def _throttle(self):
         elapsed = time.time() - self.last_request_time
         if elapsed < self.rate_limit_delay:
@@ -48,7 +49,11 @@ class SteamAPIClient:
             print(f"General error for {steam_id}: {e}")
             raise
     def _save_raw_data(self, steam_id, data, data_type="user"):
-        save_dir = self.user_data_dir if data_type == "user" else self.game_data_dir
+        save_dir = self.user_data_dir 
+        if data_type == "game":
+            save_dir = self.game_data_dir
+        elif data_type == "friend":
+            save_dir = self.friends_data_dir 
         save_dir.mkdir(parents=True, exist_ok=True)
         filename = save_dir / f"{steam_id}.json"
         with open(filename, 'w') as f:
