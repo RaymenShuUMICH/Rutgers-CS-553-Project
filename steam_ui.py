@@ -103,13 +103,13 @@ class SteamInterface:
             console.print("[green]✓ Saved heatmap to playtime_heatmap.png[/]")
         except ImportError:
             console.print("[red]⚠️ Install seaborn for visualizations: pip install seaborn[/]")
-    def gaming_habits(self):
+    def gaming_habits(self, useLatest = False):
         """Display top X most played games"""
         steam_id = self._get_steam_id()
         
         try:
             with console.status("[bold]Loading game data...") as status:
-                games_data = self.client.get_owned_games(steam_id)
+                games_data = self.client.get_owned_games(steam_id, useLatest)
                 if not games_data or not games_data.get('response'):
                     raise ValueError("No game data found")
 
@@ -169,12 +169,12 @@ class SteamInterface:
             else:
                 #logger.write_summary()
                 break
-    def _get_user_profile(self, steam_id):
+    def _get_user_profile(self, steam_id, useLatest = False):
         """Cache profiles per SteamID"""
         if steam_id not in self.cached_data['profiles']:
             with Progress() as progress:
                 task = progress.add_task(f"Fetching profile {steam_id}...", total=1) #fix time
-                self.cached_data['profiles'][steam_id] = self.client.get_user_data(steam_id)
+                self.cached_data['profiles'][steam_id] = self.client.get_user_data(steam_id, useLatest)
                 progress.update(task, advance=1)
         return self.cached_data['profiles'][steam_id]
     def _reset_cache_for_new_id(self, new_id):
@@ -183,7 +183,7 @@ class SteamInterface:
         if current_id and current_id != new_id:
             self.cached_data['profiles'] = {}
         self.cached_data['current_steam_id'] = new_id
-    def friend_network(self):
+    def friend_network(self, useLatest = False):
         """Fetch and display the user's Steam friends"""
         steam_id = self._get_steam_id()
 
@@ -203,7 +203,7 @@ class SteamInterface:
 
                 friends_info = []
                 for fid in friend_ids:
-                    profile = self.client.get_user_data(fid)
+                    profile = self.client.get_user_data(fid, useLatest)
                     player = profile.get("response", {}).get("players", [{}])[0]
                     friends_info.append({
                         "name": player.get("personaname", "Unknown"),
@@ -232,7 +232,7 @@ class SteamInterface:
             table.add_row(friend["name"], friend["steamid"], friend["country"])
 
         console.print(Panel(table, title="Friends Overview"))
-    def game_recommendations(self):
+    def game_recommendations(self, useLatest = False):
         """Recommend games based on friends' most played titles"""
         steam_id = self._get_steam_id()
 
@@ -249,12 +249,12 @@ class SteamInterface:
                 for fid in friend_ids:
                     try:
                         # Fetch friend profile
-                        profile = self.client.get_user_data(fid)
+                        profile = self.client.get_user_data(fid, useLatest)
                         name = profile.get('response', {}).get('players', [{}])[0].get('personaname', 'Unknown')
                         friend_names.append(name)
 
                         # Fetch their games
-                        game_data = self.client.get_owned_games(fid)
+                        game_data = self.client.get_owned_games(fid, useLatest)
                         if not game_data or 'response' not in game_data:
                             continue
 
@@ -286,7 +286,8 @@ class SteamInterface:
             console.print(error_panel)
         finally:
             Prompt.ask("\nPress Enter to continue...", default="")
-    def _benchmark_game_recommendations_spark(self, steam_id, friend_count, logger):
+    def _benchmark_game_recommendations_spark(self, steam_id, friend_count, logger, useCache = True):
+        useLatest = not useCache
         with logger.timed(f"api_fetch_friends_{friend_count}"):
             friend_data = self.client.get_friend_list(steam_id)
 
@@ -297,7 +298,7 @@ class SteamInterface:
         for fid in friend_ids:
             try:
                 with logger.timed(f"api_fetch_profile_{friend_count}"):
-                    profile = self.client.get_user_data(fid)
+                    profile = self.client.get_user_data(fid, useLatest)
                 name = profile.get('response', {}).get('players', [{}])[0].get('personaname', 'Unknown')
                 friend_names.append(name)
 
@@ -336,7 +337,8 @@ class SteamInterface:
         with logger.timed(f"formatting_output_{friend_count}"):
             self._render_recommendations_table(top_games, friend_names)
 
-    def _benchmark_game_recommendations_manual(self, steam_id, friend_count, logger):
+    def _benchmark_game_recommendations_manual(self, steam_id, friend_count, logger, useCache = True):
+        useLatest = not useCache
         with logger.timed(f"api_fetch_friends_{friend_count}"):
             friend_data = self.client.get_friend_list(steam_id)
 
@@ -347,7 +349,7 @@ class SteamInterface:
         for fid in friend_ids:
             try:
                 with logger.timed(f"api_fetch_profile_{friend_count}"):
-                    profile = self.client.get_user_data(fid)
+                    profile = self.client.get_user_data(fid, useLatest)
                 name = profile.get('response', {}).get('players', [{}])[0].get('personaname', 'Unknown')
                 friend_names.append(name)
 

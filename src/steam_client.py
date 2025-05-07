@@ -34,8 +34,8 @@ class SteamAPIClient:
     def get_user_data(self, steam_id, getLatest = False):
         in_cache = False
         if getLatest:
-            # 5 second timeout for latest cache to prevent spam
-            in_cache = self.check_cache(steam_id, "user", 5)
+            # 0.5 second timeout for latest cache to prevent spam
+            in_cache = self.check_cache(steam_id, "user", 0.5)
         else:
             in_cache = self.check_cache(steam_id, "user")
             #print(f"checked for in cache user {in_cache}")
@@ -77,7 +77,7 @@ class SteamAPIClient:
     def get_owned_games(self, steam_id, getLatest = False):
         in_cache = False
         if getLatest:
-           in_cache = self.check_cache(steam_id, "game", 5)
+           in_cache = self.check_cache(steam_id, "game", 0.5)
         else:
             in_cache = self.check_cache(steam_id, "game")
         if in_cache:
@@ -104,7 +104,7 @@ class SteamAPIClient:
     def get_friend_list(self, steam_id, getLatest = False):
         in_cache = False
         if getLatest:
-            in_cache = self.check_cache(steam_id, "friend", 5)
+            in_cache = self.check_cache(steam_id, "friend", 0.5)
         else:
             in_cache = self.check_cache(steam_id, "friend")
         if in_cache:

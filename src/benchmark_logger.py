@@ -42,23 +42,29 @@ class BenchmarkLogger:
                 avg_time = sum(times) / len(times)
                 out.write(f"{label}: {avg_time:.3f} ms (avg over {len(times)} runs)\n")
 
-            # Build comparative summary
-            out.write("\n=== Comparison Table (Manual vs Spark) ===\n")
-            out.write(f"{'Friends':<10}{'Manual Avg (ms)':<20}{'Spark Avg (ms)'}\n")
-            out.write(f"{'-'*50}\n")
+            # Comparative summary
+            out.write("\n=== Comparison Table (Manual vs Spark with/without cache) ===\n")
+            header = f"{'Friends':<10}{'Manual (Cached)':<18}{'Manual (No Cache)':<20}{'Spark (Cached)':<18}{'Spark (No Cache)'}\n"
+            out.write(header)
+            out.write(f"{'-'*len(header)}\n")
 
             friend_counts = set()
             for label in label_times:
-                if label.startswith("manual"):
-                    friend_counts.add(int(label.split("_")[2]))
+                parts = label.split("_")
+                if len(parts) >= 4 and parts[2].isdigit():
+                    friend_counts.add(int(parts[2]))
 
             for count in sorted(friend_counts):
-                manual_label = f"manual_recommendation_{count}_friends"
-                spark_label = f"spark_recommendation_{count}_friends"
-                manual_avg = sum(label_times.get(manual_label, [0])) / max(len(label_times.get(manual_label, [])), 1)
-                spark_avg = sum(label_times.get(spark_label, [0])) / max(len(label_times.get(spark_label, [])), 1)
-                out.write(f"{count:<10}{manual_avg:<20.3f}{spark_avg:.3f}\n")
+                def get_avg(label_prefix):
+                    times = label_times.get(label_prefix, [])
+                    return sum(times) / len(times) if times else 0.0
 
+                manual_cache = get_avg(f"manual_recommendation_{count}_friends_useCache")
+                manual_nocache = get_avg(f"manual_recommendation_{count}_friends_noCache")
+                spark_cache = get_avg(f"spark_recommendation_{count}_friends_useCache")
+                spark_nocache = get_avg(f"spark_recommendation_{count}_friends_noCache")
+
+                out.write(f"{count:<10}{manual_cache:<18.3f}{manual_nocache:<20.3f}{spark_cache:<18.3f}{spark_nocache:.3f}\n")
 
 
     @contextmanager
