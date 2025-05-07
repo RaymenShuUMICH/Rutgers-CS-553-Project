@@ -2,6 +2,7 @@
 import time
 import requests
 import json
+import os
 from pathlib import Path
 from tenacity import retry, wait_exponential, stop_after_attempt
 from config.settings import STEAM_KEY, BASE_DIR
@@ -29,7 +30,18 @@ class SteamAPIClient:
 
     @retry(wait=wait_exponential(multiplier=1, min=4, max=10),
           stop=stop_after_attempt(3))
-    def get_user_data(self, steam_id):
+    def get_user_data(self, steam_id, getLatest = False):
+        in_cache = False
+        if getLatest:
+            # 5 second timeout for latest cache to prevent spam
+            in_cache = self.check_cache(steam_id, "user", 5)
+        else:
+            in_cache = self.check_cache(steam_id, "user")
+            #print(f"checked for in cache user {in_cache}")
+        if in_cache:
+            file_path = self.user_data_dir / f"{steam_id}.json"
+            with open(file_path, 'r') as f:
+                return json.load(f)
         self._throttle()
         endpoint = "/ISteamUser/GetPlayerSummaries/v0002/"
         url = f"{self.base_url}{endpoint}"
@@ -48,6 +60,7 @@ class SteamAPIClient:
         except Exception as e:
             print(f"General error for {steam_id}: {e}")
             raise
+
     def _save_raw_data(self, steam_id, data, data_type="user"):
         save_dir = self.user_data_dir 
         if data_type == "game":
@@ -58,7 +71,17 @@ class SteamAPIClient:
         filename = save_dir / f"{steam_id}.json"
         with open(filename, 'w') as f:
             json.dump(data, f)
-    def get_owned_games(self, steam_id):
+
+    def get_owned_games(self, steam_id, getLatest = False):
+        in_cache = False
+        if getLatest:
+           in_cache = self.check_cache(steam_id, "game", 5)
+        else:
+            in_cache = self.check_cache(steam_id, "game")
+        if in_cache:
+            file_path = self.game_data_dir / f"games_{steam_id}.json"
+            with open(file_path, 'r') as f:
+                return json.load(f)
         self._throttle()
         endpoint = "/IPlayerService/GetOwnedGames/v0001/"
         params = {
@@ -75,8 +98,18 @@ class SteamAPIClient:
         except requests.exceptions.HTTPError as e:
             print(f"Error fetching games for {steam_id}: {e}")
             return None
+        
         # steam_client.py (add these to the SteamAPIClient class)
-    def get_friend_list(self, steam_id):
+    def get_friend_list(self, steam_id, getLatest = False):
+        in_cache = False
+        if getLatest:
+            in_cache = self.check_cache(steam_id, "friend", 5)
+        else:
+            in_cache = self.check_cache(steam_id, "friend")
+        if in_cache:
+            file_path = self.friends_data_dir / f"friends_{steam_id}.json"
+            with open(file_path, 'r') as f:
+                return json.load(f)
         self._throttle()
         endpoint = "/ISteamUser/GetFriendList/v1/"
         params = {'key': STEAM_KEY, 'steamid': steam_id, 'relationship': 'friend'}
@@ -84,7 +117,7 @@ class SteamAPIClient:
             response = requests.get(f"{self.base_url}{endpoint}", params=params)
             response.raise_for_status()
             self._save_raw_data(f"friends_{steam_id}", response.json(), 'friend')
-            return response.json()
+            return response.json() 
         except requests.exceptions.HTTPError as e:
             print(f"Friend list error: {e}")
             return None
@@ -106,4 +139,37 @@ class SteamAPIClient:
         except requests.exceptions.HTTPError as e:
             print(f"News error: {e}")
             return None
+    
+    @staticmethod
+    def get_file_age(file_path):
+        #Returns the age of a file in seconds.
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"File not found: {file_path}")
+        modification_time = os.path.getmtime(file_path)
+        return time.time() - modification_time
+
+    # default max time is 10 hours
+    def check_cache(self, steam_id, datatype, max_age_seconds=36000):
+        if datatype == "user":
+            dir_path = self.user_data_dir
+            filename = f"{steam_id}.json"
+        elif datatype == "game":
+            dir_path = self.game_data_dir
+            filename = f"games_{steam_id}.json"
+        elif datatype == "friend":
+            dir_path = self.friends_data_dir
+            filename = f"friends_{steam_id}.json"
+        else:
+            print(f"Unknown data type: {datatype}")
+            return False
+
+        file_path = dir_path / filename
+
+        if not file_path.exists():
+            return False
+        try:
+            file_age = self.get_file_age(file_path)
+            return file_age < max_age_seconds
+        except FileNotFoundError:
+            return False
 
