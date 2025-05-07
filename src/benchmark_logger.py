@@ -1,8 +1,11 @@
 # src/benchmark_logger.py
 import os
 import time
+import psutil
+import threading
 from pathlib import Path
 from contextlib import contextmanager
+
 
 class BenchmarkLogger:
     def __init__(self, base_dir="benchmarks"):
@@ -11,11 +14,36 @@ class BenchmarkLogger:
         self.spark_log = self.base_dir / "spark_times.log"
         self.summary_log = self.base_dir / "benchmarks.txt"
         self.base_dir.mkdir(exist_ok=True)
+        self._monitoring = False
 
     def log_time(self, label, duration_ms):
         with open(self.spark_log, "a") as f:  # use a single combined log
             f.write(f"{label}: {duration_ms:.3f}\n")
 
+    def _monitor(self, label, interval=0.1):
+        process = psutil.Process(os.getpid())
+        samples = []
+
+        while self._monitoring:
+            cpu = process.cpu_percent(interval=None)
+            mem = process.memory_info().rss / (1024 * 1024)
+            samples.append((cpu, mem))
+            time.sleep(interval)
+
+        if samples:
+            avg_cpu = sum(cpu for cpu, _ in samples) / len(samples)
+            avg_mem = sum(mem for _, mem in samples) / len(samples)
+            with open(self.base_dir / "resource_usage.log", "a") as f:
+                f.write(f"{label}: AVG_CPU={avg_cpu:.2f}% AVG_MEM={avg_mem:.2f}MB over {len(samples)} samples\n")
+
+    def start_monitoring(self, label):
+        self._monitoring = True
+        self._monitor_thread = threading.Thread(target=self._monitor, args=(label,))
+        self._monitor_thread.start()
+
+    def stop_monitoring(self):
+        self._monitoring = False
+        self._monitor_thread.join()
 
     def write_summary(self):
         label_times = {}

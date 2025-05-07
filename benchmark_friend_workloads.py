@@ -26,13 +26,17 @@ def run_friend_workload_test(steam_id, friend_counts=[10, 25, 50], use_spark=Tru
         else:
             label = label + "_noCache"
 
+        logger.start_monitoring(label)
         start = time.perf_counter()
         if use_spark:
             ui._benchmark_game_recommendations_spark(steam_id, count, logger, useCache)
         else:
             ui._benchmark_game_recommendations_manual(steam_id, count, logger, useCache)
         duration = (time.perf_counter() - start) * 1000  # ms
+
+        logger.stop_monitoring()
         logger.log_time(label, duration)
+        
 
     logger.write_summary()
 
