@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 from tenacity import retry, wait_exponential, stop_after_attempt
 from config.settings import STEAM_KEY, BASE_DIR
+from src.benchmark_logger import BenchmarkLogger
 
 import matplotlib.pyplot as plt
 try:
@@ -13,7 +14,7 @@ try:
 except ImportError:
     pass
 
-
+logger = BenchmarkLogger()
 class SteamAPIClient:
     def __init__(self):
         self.base_url = "https://api.steampowered.com"
@@ -50,7 +51,8 @@ class SteamAPIClient:
             'steamids': steam_id
         }
         try:
-            response = requests.get(url, params=params, timeout=15)
+            with logger.timed("api"):
+                response = requests.get(url, params=params, timeout=15)
             response.raise_for_status()
             self._save_raw_data(steam_id, response.json(), "user")
             return response.json()
@@ -91,15 +93,14 @@ class SteamAPIClient:
             'include_appinfo': True
         }
         try:
-            response = requests.get(f"{self.base_url}{endpoint}", params=params)
+            with logger.timed("api"):
+                response = requests.get(f"{self.base_url}{endpoint}", params=params)
             response.raise_for_status()
             self._save_raw_data(f"games_{steam_id}", response.json(), "game")
             return response.json()
         except requests.exceptions.HTTPError as e:
             print(f"Error fetching games for {steam_id}: {e}")
             return None
-        
-        # steam_client.py (add these to the SteamAPIClient class)
     def get_friend_list(self, steam_id, getLatest = False):
         in_cache = False
         if getLatest:
@@ -114,7 +115,8 @@ class SteamAPIClient:
         endpoint = "/ISteamUser/GetFriendList/v1/"
         params = {'key': STEAM_KEY, 'steamid': steam_id, 'relationship': 'friend'}
         try:
-            response = requests.get(f"{self.base_url}{endpoint}", params=params)
+            with logger.timed("api"):
+                response = requests.get(f"{self.base_url}{endpoint}", params=params)
             response.raise_for_status()
             self._save_raw_data(f"friends_{steam_id}", response.json(), 'friend')
             return response.json() 
@@ -132,7 +134,8 @@ class SteamAPIClient:
         endpoint = "/ISteamNews/GetNewsForApp/v2/"
         params = {'appid': app_id, 'count': count, 'maxlength': 300}
         try:
-            response = requests.get(f"{self.base_url}{endpoint}", params=params)
+            with logger.timed("api"):
+                response = requests.get(f"{self.base_url}{endpoint}", params=params)
             response.raise_for_status()
             self._save_raw_data(f"news_{app_id}", response.json())
             return response.json()
@@ -172,4 +175,3 @@ class SteamAPIClient:
             return file_age < max_age_seconds
         except FileNotFoundError:
             return False
-
