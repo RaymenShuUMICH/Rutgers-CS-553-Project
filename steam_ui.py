@@ -1,5 +1,5 @@
 # steam_ui.py
-from src.spark_processor import analyze_play_habits, recommend_top_games  # For analytics functions
+from src.spark_processor import recommend_top_games  # For analytics functions
 from pyspark.sql.functions import sum, avg, max  # Spark functions
 from rich.console import Console
 from rich.panel import Panel
@@ -7,13 +7,14 @@ from rich.table import Table
 from rich.progress import Progress
 from rich.prompt import Prompt, IntPrompt
 import matplotlib.pyplot as plt
+from src.benchmark_logger import BenchmarkLogger
 try:
     import seaborn as sns
 except ImportError:
     pass
 
 console = Console()
-
+#logger = BenchmarkLogger()
 class SteamInterface:
     def __init__(self, client, spark):
         self.client = client
@@ -30,11 +31,6 @@ class SteamInterface:
             default="76561197960265731"
         )
         return self.cached_data['current_steam_id']
-    def _display_and_wait(self, panel):
-        """Show output and wait for user confirmation"""
-        console.print(panel)
-        Prompt.ask("\nPress Enter to continue...", default="")
-        
     def profile_summary(self):
         """Display basic user profile information"""
         steam_id = self._get_steam_id()
@@ -159,20 +155,19 @@ class SteamInterface:
             
             choice = Prompt.ask(
                 "\nChoose an option:",
-                choices=["1", "2", "3", "4", "5", "q"],
+                choices=["1", "2", "3", "4", "q"],
                 show_choices=True
             )
             
             if choice == "1": self.profile_summary()
             elif choice == "2": self.gaming_habits()
             elif choice == "3": self.friend_network()
-            elif choice == "4": self.game_recommendations()
-            elif choice == "5": self.export_data()
-            #elif choice == "q'": break
+            elif choice == "4": self.game_recommendations()            
             if choice != "q":
                 # Only clear after user has viewed the output
                 console.clear()  # Move this from top of loop to here
             else:
+                #logger.write_summary()
                 break
     def _get_user_profile(self, steam_id):
         """Cache profiles per SteamID"""
@@ -291,6 +286,121 @@ class SteamInterface:
             console.print(error_panel)
         finally:
             Prompt.ask("\nPress Enter to continue...", default="")
+    def _benchmark_game_recommendations_spark(self, steam_id, friend_count, logger):
+        with logger.timed(f"api_fetch_friends_{friend_count}"):
+            friend_data = self.client.get_friend_list(steam_id)
+
+        friend_ids = [f['steamid'] for f in friend_data.get('friendslist', {}).get('friends', [])][:friend_count]
+        all_games = []
+        friend_names = []
+
+        for fid in friend_ids:
+            try:
+                with logger.timed(f"api_fetch_profile_{friend_count}"):
+                    profile = self.client.get_user_data(fid)
+                name = profile.get('response', {}).get('players', [{}])[0].get('personaname', 'Unknown')
+                friend_names.append(name)
+
+                with logger.timed(f"api_fetch_games_{friend_count}"):
+                    game_data = self.client.get_owned_games(fid)
+
+                if not game_data or 'response' not in game_data:
+                    continue
+
+                games = sorted(
+                    game_data['response'].get('games', []),
+                    key=lambda g: g.get('playtime_forever', 0),
+                    reverse=True
+                )[:10]
+
+                for game in games:
+                    all_games.append((
+                        game.get('appid'),
+                        game.get('name', f"Unknown ({game.get('appid')})"),
+                        game.get('playtime_forever', 0)
+                    ))
+            except Exception:
+                continue
+
+        with logger.timed(f"api_fetch_user_games_{friend_count}"):
+            user_game_data = self.client.get_owned_games(steam_id)
+
+        user_owned_appids = {
+            game.get("appid")
+            for game in user_game_data['response'].get("games", [])
+        } if user_game_data and 'response' in user_game_data else set()
+
+        with logger.timed(f"spark_processing_{friend_count}"):
+            top_games = recommend_top_games(self.spark, all_games, user_owned_appids)
+
+        with logger.timed(f"formatting_output_{friend_count}"):
+            self._render_recommendations_table(top_games, friend_names)
+
+    def _benchmark_game_recommendations_manual(self, steam_id, friend_count, logger):
+        with logger.timed(f"api_fetch_friends_{friend_count}"):
+            friend_data = self.client.get_friend_list(steam_id)
+
+        friend_ids = [f['steamid'] for f in friend_data.get('friendslist', {}).get('friends', [])][:friend_count]
+        all_games = []
+        friend_names = []
+
+        for fid in friend_ids:
+            try:
+                with logger.timed(f"api_fetch_profile_{friend_count}"):
+                    profile = self.client.get_user_data(fid)
+                name = profile.get('response', {}).get('players', [{}])[0].get('personaname', 'Unknown')
+                friend_names.append(name)
+
+                with logger.timed(f"api_fetch_games_{friend_count}"):
+                    game_data = self.client.get_owned_games(fid)
+
+                if not game_data or 'response' not in game_data:
+                    continue
+
+                games = sorted(
+                    game_data['response'].get('games', []),
+                    key=lambda g: g.get('playtime_forever', 0),
+                    reverse=True
+                )[:10]
+
+                for game in games:
+                    all_games.append((
+                        game.get('appid'),
+                        game.get('name', f"Unknown ({game.get('appid')})"),
+                        game.get('playtime_forever', 0)
+                    ))
+            except Exception:
+                continue
+
+        with logger.timed(f"api_fetch_user_games_{friend_count}"):
+            user_game_data = self.client.get_owned_games(steam_id)
+
+        user_owned_appids = {
+            game.get("appid")
+            for game in user_game_data['response'].get("games", [])
+        } if user_game_data and 'response' in user_game_data else set()
+
+        with logger.timed(f"manual_processing_{friend_count}"):
+            from collections import defaultdict
+            playtime_by_game = defaultdict(lambda: [None, 0])
+            for appid, name, playtime in all_games:
+                if appid in user_owned_appids:
+                    continue
+                playtime_by_game[appid][0] = name
+                playtime_by_game[appid][1] += playtime
+
+            top_games = sorted(
+                [(appid, name, time) for appid, (name, time) in playtime_by_game.items()],
+                key=lambda x: x[2],
+                reverse=True
+            )[:10]
+
+        with logger.timed(f"formatting_output_{friend_count}"):
+            from pandas import DataFrame
+            df = DataFrame(top_games, columns=["appid", "name", "total_playtime"])
+            self._render_recommendations_table(df, friend_names)
+
+
     def _render_recommendations_table(self, recs_df, friend_names):
         table = Table(title="Top Game Recommendations", show_lines=True)
         table.add_column("Game", style="cyan")
