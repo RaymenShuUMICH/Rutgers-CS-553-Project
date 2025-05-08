@@ -12,4 +12,4 @@ To run our program, perform the following steps:
 5.  To run the benchmarked client, run the benchmark_friend_workloads script with python benchmark_friend_workloads.py (this script will take about a minute or 2 to run, so please be patient)
 
    a.   To view the results of the benchmarking for yourself, look inside the benchmarks folder that will be generated after running the script.
-6.   he program will require some disk space to work properly, as it uses JSON files to cache data received from the Steam API.
+6. The program will require some disk space to work properly, as it uses JSON files to cache data received from the Steam API.
