@@ -7,7 +7,7 @@ import time
 import os
 import shutil
 
-for f in ["benchmarks/benchmark_raw_log.txt", "benchmarks/api_times.log", "benchmarks/spark_times.log", "benchmarks/benchmarks.txt"]:
+for f in ["benchmarks/benchmark_raw_log.txt", "benchmarks/api_times.log", "benchmarks/spark_times.log", "benchmarks/benchmarks.txt", "benchmarks/resource_usage.log"]:
     try:
         os.remove(f)
     except FileNotFoundError:
