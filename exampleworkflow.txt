@@ -1,5 +1,8 @@
 # Clean existing data
-rm -rf data/raw/games/*.json
+rm -rf data/raw/games/games/*.json
+rm -rf data/raw/games/users/*.json
+rm -rf data/raw/games/friends/*.json
+
 
 # Run tester client
 python testclient.py
