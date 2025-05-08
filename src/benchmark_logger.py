@@ -13,6 +13,7 @@ class BenchmarkLogger:
         self.api_log = self.base_dir / "api_times.log"
         self.spark_log = self.base_dir / "spark_times.log"
         self.summary_log = self.base_dir / "benchmarks.txt"
+        self.resource_log = self.base_dir / "resource_usage.log"
         self.base_dir.mkdir(exist_ok=True)
         self._monitoring = False
 
