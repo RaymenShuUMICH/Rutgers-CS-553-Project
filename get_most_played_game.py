@@ -35,7 +35,6 @@ def main():
 
     client = SteamAPIClient()
     
-    # Show progress bar during data fetch
     with console.status("[bold green]Fetching Steam data...") as status:
         games_data = client.get_owned_games(args.steam_id)
     
